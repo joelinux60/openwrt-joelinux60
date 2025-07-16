@@ -41,44 +41,29 @@
 	leds {
 		compatible = "gpio-leds";
 
-		led-wan {
+		wan {
 			color = <LED_COLOR_ID_GREEN>;
 			function = LED_FUNCTION_WAN;
 			gpios = <&pio 8 GPIO_ACTIVE_LOW>;
 		};
 
-		led-status-blue {
+		blue {
 			color = <LED_COLOR_ID_BLUE>;
 			function = LED_FUNCTION_STATUS;
 			gpios = <&pio 23 GPIO_ACTIVE_HIGH>;
 		};
 
-		led-status-green {
+		green {
 			color = <LED_COLOR_ID_GREEN>;
 			function = LED_FUNCTION_STATUS;
 			gpios = <&pio 24 GPIO_ACTIVE_LOW>;
 		};
 
-		led-status-red {
+		red {
 			color = <LED_COLOR_ID_RED>;
 			function = LED_FUNCTION_STATUS;
 			gpios = <&pio 25 GPIO_ACTIVE_LOW>;
-		};
-
-		led-wlan2g {
-			color = <LED_COLOR_ID_GREEN>;
-			function = LED_FUNCTION_WLAN_2GHZ;
-			gpios = <&pio 34 GPIO_ACTIVE_LOW>;
-			function-enumerator = <0>;
-			linux,default-trigger = "phy0tpt";
-		};
-
-		led-wlan5g {
-			color = <LED_COLOR_ID_GREEN>;
-			function = LED_FUNCTION_WLAN_5GHZ;
-			gpios = <&pio 35 GPIO_ACTIVE_LOW>;
-			function-enumerator = <1>;
-			linux,default-trigger = "phy1tpt";
+			default-state = "on";
 		};
 	};
 	
