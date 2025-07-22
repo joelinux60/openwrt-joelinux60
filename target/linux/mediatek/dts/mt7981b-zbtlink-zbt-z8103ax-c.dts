@@ -10,6 +10,11 @@
 
 	aliases {
 		serial0 = &uart0;
+		led-boot = &led_status_blue;
+		led-failsafe = &led_status_red;
+		led-running = &led_status_green;
+		led-upgrade = &led_status_green;
+		label-mac-device = &gmac0;
 	};
 
 	chosen {
@@ -47,23 +52,38 @@
 			gpios = <&pio 8 GPIO_ACTIVE_LOW>;
 		};
 
-		blue {
+		led_status_blue: mesh-blue {
 			color = <LED_COLOR_ID_BLUE>;
 			function = LED_FUNCTION_STATUS;
-			gpios = <&pio 23 GPIO_ACTIVE_HIGH>;
+			gpios = <&pio 23 GPIO_ACTIVE_LOW>;
 		};
 
-		green {
+		led_status_green: mesh-green {
 			color = <LED_COLOR_ID_GREEN>;
 			function = LED_FUNCTION_STATUS;
 			gpios = <&pio 24 GPIO_ACTIVE_LOW>;
 		};
 
-		red {
+		led_status_red: mesh-red {
 			color = <LED_COLOR_ID_RED>;
 			function = LED_FUNCTION_STATUS;
 			gpios = <&pio 25 GPIO_ACTIVE_LOW>;
 			default-state = "on";
+		};
+		led-wlan2g {
+			color = <LED_COLOR_ID_GREEN>;
+			function = LED_FUNCTION_WLAN_2GHZ;
+			gpios = <&pio 34 GPIO_ACTIVE_LOW>;
+			function-enumerator = <0>;
+			linux,default-trigger = "phy0tpt";
+		};
+
+		led-wlan5g {
+			color = <LED_COLOR_ID_GREEN>;
+			function = LED_FUNCTION_WLAN_5GHZ;
+			gpios = <&pio 35 GPIO_ACTIVE_LOW>;
+			function-enumerator = <1>;
+			linux,default-trigger = "phy1tpt";
 		};
 	};
 	
