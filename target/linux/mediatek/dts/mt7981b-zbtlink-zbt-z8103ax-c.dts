@@ -10,7 +10,7 @@
 
 	aliases {
 		serial0 = &uart0;
-		led-boot = &led_status_green;
+		led-boot = &led_status_blue;
 		led-failsafe = &led_status_red;
 		led-running = &led_status_green;
 		led-upgrade = &led_status_green;
@@ -19,7 +19,7 @@
 
 	chosen {
 		stdout-path = "serial0:115200n8";
-		bootargs = "earlycon=uart8250,mmio32,0x11002000 console=ttyS0,115200n8 loglevel=8";
+		bootargs = "earlycon=uart8250,mmio32,0x11002000 console=ttyS0,115200n8";
 	};
 
 	memory {
@@ -46,33 +46,33 @@
 	leds {
 		compatible = "gpio-leds";
 
-		led-wan {
+		wan {
 			color = <LED_COLOR_ID_GREEN>;
 			function = LED_FUNCTION_WAN;
 			gpios = <&pio 8 GPIO_ACTIVE_LOW>;
 		};
 
-		led-status-blue {
+		led_status_blue: mesh-blue {
 			color = <LED_COLOR_ID_BLUE>;
 			function = LED_FUNCTION_STATUS;
-			gpios = <&pio 23 GPIO_ACTIVE_HIGH>;
+			gpios = <&pio 23 GPIO_ACTIVE_LOW>;
 		};
 
-		led_status_green: led-status-green {
+		led_status_green: mesh-green {
 			color = <LED_COLOR_ID_GREEN>;
 			function = LED_FUNCTION_STATUS;
 			gpios = <&pio 24 GPIO_ACTIVE_LOW>;
 		};
 
-		led_status_red: led-status-red {
+		led_status_red: mesh-red {
 			color = <LED_COLOR_ID_RED>;
 			function = LED_FUNCTION_STATUS;
 			gpios = <&pio 25 GPIO_ACTIVE_LOW>;
+			default-state = "on";
 		};
-
 		led-wlan2g {
 			color = <LED_COLOR_ID_GREEN>;
-			function = LED_FUNCTION_WLAN;
+			function = LED_FUNCTION_WLAN_2GHZ;
 			gpios = <&pio 34 GPIO_ACTIVE_LOW>;
 			function-enumerator = <0>;
 			linux,default-trigger = "phy0tpt";
@@ -80,10 +80,28 @@
 
 		led-wlan5g {
 			color = <LED_COLOR_ID_GREEN>;
-			function = LED_FUNCTION_WLAN;
+			function = LED_FUNCTION_WLAN_5GHZ;
 			gpios = <&pio 35 GPIO_ACTIVE_LOW>;
 			function-enumerator = <1>;
 			linux,default-trigger = "phy1tpt";
+		};
+	};
+	
+	watchdog {
+		compatible = "linux,wdt-gpio";
+		gpios = <&pio 2 GPIO_ACTIVE_HIGH>;
+		hw_algo = "toggle";
+		hw_margin_ms = <1000>;
+	};
+	
+	gpio-export {
+		compatible = "gpio-export";
+		#size-cells = <0>;
+
+		wdg {
+			gpio-export,name = "wdg";
+			gpio-export,output = <1>;
+			gpios = <&pio 2 GPIO_ACTIVE_HIGH>;
 		};
 	};
 };
@@ -98,7 +116,7 @@
 		phy-mode = "2500base-x";
 
 		nvmem-cell-names = "mac-address";
-		nvmem-cells = <&macaddr_factory_4 2>;
+		nvmem-cells = <&macaddr_factory_004>;
 
 		fixed-link {
 			speed = <2500>;
@@ -115,7 +133,7 @@
 		phy-handle = <&int_gbe_phy>;
 
 		nvmem-cell-names = "mac-address";
-		nvmem-cells = <&macaddr_factory_4 3>;
+		nvmem-cells = <&macaddr_factory_02a>;
 	};
 };
 
@@ -128,6 +146,47 @@
 		#interrupt-cells = <1>;
 		interrupt-parent = <&pio>;
 		interrupts = <38 IRQ_TYPE_LEVEL_HIGH>;
+	};
+};
+
+&switch {
+	ports {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		port@0 {
+			reg = <0>;
+			label = "lan1";
+			nvmem-cell-names = "mac-address";
+			nvmem-cells = <&macaddr_factory_004>;
+		};
+
+		port@1 {
+			reg = <1>;
+			label = "lan2";
+			nvmem-cell-names = "mac-address";
+			nvmem-cells = <&macaddr_factory_004>;
+		};
+
+		port@2 {
+			reg = <2>;
+			label = "lan3";
+			nvmem-cell-names = "mac-address";
+			nvmem-cells = <&macaddr_factory_004>;
+		};
+
+		port@6 {
+			reg = <6>;
+			label = "cpu";
+			ethernet = <&gmac0>;
+			phy-mode = "2500base-x";
+
+			fixed-link {
+				speed = <2500>;
+				full-duplex;
+				pause;
+			};
+		};
 	};
 };
 
@@ -162,26 +221,10 @@
 				reg = <0x100000 0x80000>;
 			};
 
-			partition@180000 {
+			factory: partition@180000 {
 				label = "Factory";
 				reg = <0x180000 0x200000>;
 				read-only;
-
-				nvmem-layout {
-					compatible = "fixed-layout";
-					#address-cells = <1>;
-					#size-cells = <1>;
-
-					eeprom_factory: eeprom@0 {
-						reg = <0x0 0x1000>;
-					};
-
-					macaddr_factory_4: macaddr@4 {
-						compatible = "mac-base";
-						reg = <0x4 0x6>;
-						#nvmem-cell-cells = <1>;
-					};
-				};
 			};
 
 			partition@380000 {
@@ -193,41 +236,6 @@
 			partition@580000 {
 				label = "ubi";
 				reg = <0x580000 0x7280000>;
-			};
-		};
-	};
-};
-
-&switch {
-	ports {
-		#address-cells = <1>;
-		#size-cells = <0>;
-
-		port@0 {
-			reg = <0>;
-			label = "lan1";
-		};
-
-		port@1 {
-			reg = <1>;
-			label = "lan2";
-		};
-
-		port@2 {
-			reg = <2>;
-			label = "lan3";
-		};
-
-		port@6 {
-			reg = <6>;
-			label = "cpu";
-			ethernet = <&gmac0>;
-			phy-mode = "2500base-x";
-
-			fixed-link {
-				speed = <2500>;
-				full-duplex;
-				pause;
 			};
 		};
 	};
@@ -266,4 +274,20 @@
 	status = "okay";
 	nvmem-cells = <&eeprom_factory>;
 	nvmem-cell-names = "eeprom";
+};
+
+&factory {
+	compatible = "nvmem-cells";
+	#address-cells = <1>;
+	#size-cells = <1>;
+
+	macaddr_factory_004: macaddr@4 {
+		reg = <0x004 0x6>;
+	};
+	macaddr_factory_02a: macaddr@2a {
+		reg = <0x02a 0x6>;
+	};
+        eeprom_factory: eeprom@0 {
+		reg = <0x0 0x1000>;
+	};
 };
