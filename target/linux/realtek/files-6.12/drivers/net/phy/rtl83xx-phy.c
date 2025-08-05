@@ -38,6 +38,7 @@ extern int phy_package_read_paged(struct phy_device *phydev, int page, u32 regnu
 #define RTL821X_PAGE_MAC		0x0a43
 #define RTL821X_PAGE_STATE		0x0b80
 #define RTL821X_PAGE_PATCH		0x0b82
+#define RTL821X_MAC_SDS_PAGE(sds, page)	(0x404 + (sds) * 0x20 + (page))
 
 /* Using the special page 0xfff with the MDIO controller found in
  * RealTek SoCs allows to access the PHY in RAW mode, ie. bypassing
@@ -119,7 +120,10 @@ static u64 disable_polling(int port)
 		sw_w32_mask(BIT(port), 0, RTL930X_SMI_POLL_CTRL);
 		break;
 	case RTL9310_FAMILY_ID:
-		pr_warn("%s not implemented for RTL931X\n", __func__);
+		saved_state = sw_r32(RTL931X_SMI_PORT_POLLING_CTRL + 4);
+		saved_state <<= 32;
+		saved_state |= sw_r32(RTL931X_SMI_PORT_POLLING_CTRL);
+		sw_w32_mask(BIT(port % 32), 0, RTL931X_SMI_PORT_POLLING_CTRL + ((port >> 5) << 2));
 		break;
 	}
 
@@ -144,7 +148,8 @@ static int resume_polling(u64 saved_state)
 		sw_w32(saved_state, RTL930X_SMI_POLL_CTRL);
 		break;
 	case RTL9310_FAMILY_ID:
-		pr_warn("%s not implemented for RTL931X\n", __func__);
+		sw_w32(saved_state >> 32, RTL931X_SMI_PORT_POLLING_CTRL + 4);
+		sw_w32(saved_state, RTL931X_SMI_PORT_POLLING_CTRL);
 		break;
 	}
 
@@ -287,44 +292,6 @@ static u32 rtl9300_sds_mode_get(int sds_num)
 	return v & RTL930X_SDS_MASK;
 }
 
-/* On the RTL839x family of SoCs with inbuilt SerDes, these SerDes are accessed through
- * a 2048 bit register that holds the contents of the PHY being simulated by the SoC.
- */
-int rtl839x_read_sds_phy(int phy_addr, int phy_reg)
-{
-	int offset = 0;
-	int reg;
-	u32 val;
-
-	if (phy_addr == 49)
-		offset = 0x100;
-
-	/* For the RTL8393 internal SerDes, we simulate a PHY ID in registers 2/3
-	 * which would otherwise read as 0.
-	 */
-	if (soc_info.id == 0x8393) {
-		if (phy_reg == MII_PHYSID1)
-			return 0x1c;
-		if (phy_reg == MII_PHYSID2)
-			return 0x8393;
-	}
-
-	/* Register RTL839X_SDS12_13_XSG0 is 2048 bit broad, the MSB (bit 15) of the
-	 * 0th PHY register is bit 1023 (in byte 0x80). Because PHY-registers are 16
-	 * bit broad, we offset by reg << 1. In the SoC 2 registers are stored in
-	 * one 32 bit register.
-	 */
-	reg = (phy_reg << 1) & 0xfc;
-	val = sw_r32(RTL839X_SDS12_13_XSG0 + offset + 0x80 + reg);
-
-	if (phy_reg & 1)
-		val = (val >> 16) & 0xffff;
-	else
-		val &= 0xffff;
-
-	return val;
-}
-
 /* On the RTL930x family of SoCs, the internal SerDes are accessed through an IO
  * register which simulates commands to an internal MDIO bus.
  */
@@ -415,29 +382,6 @@ int rtl931x_write_sds_phy(int phy_addr, int page, int phy_reg, u16 v)
 
 	if (i >= 100)
 		return -EIO;
-
-	return 0;
-}
-
-int rtl839x_write_sds_phy(int phy_addr, int phy_reg, u16 v)
-{
-	int offset = 0;
-	int reg;
-	u32 val;
-
-	if (phy_addr == 49)
-		offset = 0x100;
-
-	reg = (phy_reg << 1) & 0xfc;
-	val = v;
-	if (phy_reg & 1) {
-		val = val << 16;
-		sw_w32_mask(0xffff0000, val,
-			    RTL839X_SDS12_13_XSG0 + offset + 0x80 + reg);
-	} else {
-		sw_w32_mask(0xffff, val,
-			    RTL839X_SDS12_13_XSG0 + offset + 0x80 + reg);
-	}
 
 	return 0;
 }
@@ -1706,9 +1650,11 @@ static int rtsds_930x_get_internal_mode(int sds)
 
 static void rtsds_930x_set_power(int sds, bool on)
 {
-	int power = on ? 0 : 3;
+	int power_down = on ? 0x0 : 0x3;
+	int rx_enable = on ? 0x3 : 0x1;
 
-	rtl9300_sds_field_w(sds, 0x20, 0x00, 7, 6, power);
+	rtl9300_sds_field_w(sds, 0x20, 0x00, 7, 6, power_down);
+	rtl9300_sds_field_w(sds, 0x20, 0x00, 5, 4, rx_enable);
 }
 
 static int rtsds_930x_config_pll(int sds, phy_interface_t interface)
@@ -3047,7 +2993,7 @@ static void rtl9310_sds_field_w(int sds, u32 page, u32 reg, int end_bit, int sta
 	if (l < 32) {
 		u32 mask = BIT(l) - 1;
 
-		data = rtl930x_read_sds_phy(sds, page, reg);
+		data = rtl931x_read_sds_phy(sds, page, reg);
 		data &= ~(mask << start_bit);
 		data |= (v & mask) << start_bit;
 	}
@@ -3811,6 +3757,55 @@ static int rtl821x_config_init(struct phy_device *phydev)
 	return 0;
 }
 
+static void rtl8218b_cmu_reset(struct phy_device *phydev, int reset_id)
+{
+	int bitpos = reset_id * 2;
+
+	/* CMU seems to have 8 pairs of reset bits that always work the same way */
+	phy_modify_paged(phydev, 0x467, 0x14, 0, BIT(bitpos));
+	phy_modify_paged(phydev, 0x467, 0x14, 0, BIT(bitpos + 1));
+	phy_write_paged(phydev, 0x467, 0x14, 0x0);
+}
+
+static int rtl8218b_config_init(struct phy_device *phydev)
+{
+	int oldpage, oldxpage;
+
+	rtl821x_config_init(phydev);
+
+	if (phydev->mdio.addr % 8)
+		return 0;
+	/*
+	 * Realtek provides two ways of initializing the PHY package. Either by U-Boot or via
+	 * vendor software and SDK. In case U-Boot setup is missing, run basic configuration
+	 * so that ports at least get link up and pass traffic.
+	 */
+
+	oldpage = phy_read(phydev, RTL8XXX_PAGE_SELECT);
+	oldxpage = phy_read(phydev, RTL821XEXT_MEDIA_PAGE_SELECT);
+	phy_write(phydev, RTL821XEXT_MEDIA_PAGE_SELECT, 0x8);
+
+	/* activate 32/40 bit redundancy algorithm for first MAC serdes */
+	phy_modify_paged(phydev, RTL821X_MAC_SDS_PAGE(0, 1), 0x14, 0, BIT(3));
+	/* magic CMU setting for stable connectivity of first MAC serdes */
+	phy_write_paged(phydev, 0x462, 0x15, 0x6e58);
+	rtl8218b_cmu_reset(phydev, 0);
+
+	for (int sds = 0; sds < 2; sds++) {
+		/* force negative clock edge */
+		phy_modify_paged(phydev, RTL821X_MAC_SDS_PAGE(sds, 0), 0x17, 0, BIT(14));
+		rtl8218b_cmu_reset(phydev, 5 + sds);
+		/* soft reset */
+		phy_modify_paged(phydev, RTL821X_MAC_SDS_PAGE(sds, 0), 0x13, 0, BIT(6));
+		phy_modify_paged(phydev, RTL821X_MAC_SDS_PAGE(sds, 0), 0x13, BIT(6), 0);
+	}
+
+	phy_write(phydev, RTL821XEXT_MEDIA_PAGE_SELECT, oldxpage);
+	phy_write(phydev, RTL8XXX_PAGE_SELECT, oldpage);
+
+	return 0;
+}
+
 static int rtl838x_serdes_probe(struct phy_device *phydev)
 {
 	int addr = phydev->mdio.addr;
@@ -3898,7 +3893,7 @@ static struct phy_driver rtl83xx_phy_driver[] = {
 	{
 		.match_phy_device = rtl8218b_ext_match_phy_device,
 		.name		= "Realtek RTL8218B (external)",
-		.config_init	= rtl821x_config_init,
+		.config_init	= rtl8218b_config_init,
 		.features	= PHY_GBIT_FEATURES,
 		.probe		= rtl8218b_ext_phy_probe,
 		.read_mmd	= rtl821x_read_mmd,
