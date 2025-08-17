@@ -1,0 +1,187 @@
+// SPDX-License-Identifier: GPL-2.0-or-later OR MIT
+
+#include "qca953x.dtsi"
+
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/input/input.h>
+#include <dt-bindings/leds/common.h>
+
+/ {
+	model = "ZBT WE826 Q";
+	compatible = "zbtlink,zbt-we826", "qca,ar9344";
+
+	aliases {
+		led-boot = &led_status_blue;
+		led-failsafe = &led_status_blue;
+		led-running = &led_status_blue;
+		led-upgrade = &led_status_blue;
+		label-mac-device = &eth0;
+	};
+
+	keys {
+		compatible = "gpio-keys";
+
+		pinctrl-names = "default";
+
+		reset {
+			label = "reset";
+			linux,code = <KEY_RESTART>;
+			gpios = <&gpio 17 GPIO_ACTIVE_LOW>;
+		};
+	};
+
+	leds {
+		compatible = "gpio-leds";
+
+		wan_blue {
+			function = LED_FUNCTION_WAN;
+			color = <LED_COLOR_ID_BLUE>;
+			gpios = <&gpio 4 GPIO_ACTIVE_LOW>;
+		};
+
+		led_status_blue: status_blue {
+			function = LED_FUNCTION_STATUS;
+			color = <LED_COLOR_ID_BLUE>;
+			gpios = <&gpio 13 GPIO_ACTIVE_LOW>;
+		};
+
+		wlan2g_blue {
+			function = LED_FUNCTION_WLAN_2GHZ;
+			color = <LED_COLOR_ID_BLUE>;
+			gpios = <&gpio 12 GPIO_ACTIVE_LOW>;
+		};
+
+    	lan1_blue {
+			function = LED_FUNCTION_LAN;
+			color = <LED_COLOR_ID_BLUE>;
+			gpios = <&gpio 16 GPIO_ACTIVE_LOW>;
+		};
+
+        lan2_blue {
+			function = LED_FUNCTION_LAN;
+			color = <LED_COLOR_ID_BLUE>;
+			gpios = <&gpio 15 GPIO_ACTIVE_LOW>;
+		};
+
+        lan3_blue {
+			function = LED_FUNCTION_LAN;
+			color = <LED_COLOR_ID_BLUE>;
+			gpios = <&gpio 14 GPIO_ACTIVE_LOW>;
+		};
+        
+        lan4_blue {
+			function = LED_FUNCTION_LAN;
+			color = <LED_COLOR_ID_BLUE>;
+			gpios = <&gpio 11 GPIO_ACTIVE_LOW>;
+		};
+	};
+
+	watchdog {
+		compatible = "linux,wdt-gpio";
+		gpios = <&gpio 2 GPIO_ACTIVE_LOW>;
+		hw_algo = "toggle";
+		/* hw_margin_ms is actually 300s but driver limits it to 60s */
+		hw_margin_ms = <60000>;
+		always-running;
+	};
+};
+
+&spi {
+	status = "okay";
+
+	flash@0 {
+		compatible = "jedec,spi-nor";
+		reg = <0>;
+		spi-max-frequency = <25000000>;
+
+		/* partitions are passed via bootloader */
+		partitions {
+			compatible = "fixed-partitions";
+			#address-cells = <1>;
+			#size-cells = <1>;
+
+			partition@0 {
+				label = "u-boot";
+				reg = <0x000000 0x020000>;
+				read-only;
+			};
+
+			partition@20000 {
+				label = "kernel";
+				reg = <0x020000 0x01ab5a0>;
+			};
+
+			partition@1ab5a0 {
+				label = "rootfs";
+				reg = <0x1ab5a0 0xff0000>;
+				read-only;
+			};
+
+			partition@ff0000 {
+				label = "art";
+				reg = <0xff0000 0x1000000>;
+				read-only;
+
+				nvmem-layout {
+					compatible = "fixed-layout";
+					#address-cells = <1>;
+					#size-cells = <1>;
+
+					macaddr_art_0: macaddr@0 {
+						reg = <0x0 0x6>;
+					};
+
+					macaddr_art_6: macaddr@6 {
+						reg = <0x6 0x6>;
+					};
+
+					cal_art_1000: calibration@1000 {
+						reg = <0x1000 0x440>;
+					};
+				};
+			};
+		};
+	};
+};
+
+&eth0 {
+	status = "okay";
+
+	phy-handle = <&swphy4>;
+
+	nvmem-cells = <&macaddr_art_0 0>;
+	nvmem-cell-names = "mac-address";
+};
+
+&eth1 {
+	/* Workaround: keep the Ethernet interfaces order/mapping correct
+	 * (GMAC0 -> eth0, GMAC1 -> eth1, same as in old ar71xx target)
+	 */
+	compatible = "qca,qca9530-eth", "syscon", "simple-mfd";
+
+	nvmem-cells = <&macaddr_art_6 1>;
+	nvmem-cell-names = "mac-address";
+};
+
+&wdt {
+	status = "disabled";
+};
+
+&wmac {
+	status = "okay";
+
+	nvmem-cells = <&macaddr_art_0 2>, <&cal_art_1000>;
+	nvmem-cell-names = "mac-address", "calibration";
+};
+
+&pcie0 {
+	status = "okay";
+};
+
+&usb0 {
+	status = "okay";
+};
+
+&usb_phy {
+	status = "okay";
+};

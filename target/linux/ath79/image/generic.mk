@@ -3420,11 +3420,22 @@ define Device/zbtlink_zbt-wd323
   SOC := ar9344
   DEVICE_VENDOR := ZBT
   DEVICE_MODEL := WD323
-  IMAGE_SIZE := 16000k
+  IMAGE_SIZE := 16384k
   DEVICE_PACKAGES := kmod-usb2 kmod-i2c-gpio kmod-rtc-pcf8563 \
 	kmod-usb-serial-cp210x uqmi
 endef
 TARGET_DEVICES += zbtlink_zbt-wd323
+
+define Device/zbtlink_zbt_we826-q
+  $(Device/tplink-safeloader-uimage)
+  SOC := qca9533
+  DEVICE_VENDOR := ZBT
+  DEVICE_MODEL := WE828-Q
+  IMAGE_SIZE := 16000k
+  DEVICE_PACKAGES := kmod-usb2 kmod-i2c-gpio kmod-rtc-pcf8563 \
+	kmod-usb-serial-cp210x uqmi
+endef
+TARGET_DEVICES += zbtlink_zbt_we826-q
 
 define Device/zyxel_nwa11xx
   $(Device/loader-okli-uimage)
